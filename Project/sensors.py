@@ -1,7 +1,8 @@
 import random
 import math
-import datetime
 import time
+from datetime import datetime
+
 
 class Sensor:
     def __init__(self, sensor_id, name, unit, min_value, max_value, frequency=1):
@@ -15,6 +16,10 @@ class Sensor:
         self.last_value = None
         self.last_read_time = None
         self.history = []
+        self._callbacks = []
+
+    def register_callback(self, callback):
+        self._callbacks.append(callback)
 
     def read_value(self):
         if not self.active:
@@ -27,6 +32,9 @@ class Sensor:
         self.last_value = value
         self.last_read_time = now
         self.history.append(value)
+
+        for cb in self._callbacks:
+            cb(self.sensor_id, datetime.now(), value, self.unit)
         return value
 
     def generate_value(self):
@@ -61,7 +69,7 @@ class TemperatureSensor(Sensor):
         super().__init__(sensor_id, "Temperatura zewnętrzna", "°C", -20, 50, frequency=1)
 
     def generate_value(self):
-        hour = datetime.datetime.now().hour
+        hour = datetime.now().hour
         base = 15 + 10 * math.sin((math.pi / 12) * (hour - 6))
         noise = random.uniform(-2, 2)
         return min(max(base + noise, self.min_value), self.max_value)
@@ -92,7 +100,7 @@ class LightSensor(Sensor):
         super().__init__(sensor_id, "Natężenie światła", "lx", 0, 10000, frequency=2)
 
     def generate_value(self):
-        hour = datetime.datetime.now().hour
+        hour = datetime.now().hour
         base = max(0, 10000 * math.sin((math.pi / 12) * (hour - 6)))
         noise = random.uniform(-200, 200)
         return min(max(base + noise, self.min_value), self.max_value)
