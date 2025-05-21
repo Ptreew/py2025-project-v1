@@ -76,7 +76,7 @@ class Logger:
             self.flush()
             self._rotate_if_needed()
 
-        # Opcjonalnie: wymuszony zapis po 10 zapisach, aby upewnić się, że dane są zapisywane regularnie
+        # Wymuszony zapis po 10 zapisach, aby upewnić się, że dane są zapisywane regularnie
         elif len(self.buffer) % 10 == 0:
             self.flush()
             self._rotate_if_needed()
