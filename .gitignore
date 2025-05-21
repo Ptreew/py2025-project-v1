@@ -1,2 +1,4 @@
 **/.idea/
 **/__pycache__/
+*.pyc
+Project/__pycache__/sensors.cpython-313.pyc

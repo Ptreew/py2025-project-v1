@@ -76,7 +76,7 @@ class Logger:
             self.flush()
             self._rotate_if_needed()
 
-        # Opcjonalnie: wymuszony zapis po 10 zapisach, aby upewnić się, że dane są zapisywane regularnie
+        # Wymuszony zapis po 10 zapisach, aby upewnić się, że dane są zapisywane regularnie
         elif len(self.buffer) % 10 == 0:
             self.flush()
             self._rotate_if_needed()
@@ -137,24 +137,21 @@ class Logger:
     def read_logs(self, start: datetime, end: datetime, sensor_id: Optional[str] = None) -> Iterator[Dict]:
         def parse_file(file_path):
             with open(file_path, 'r') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    row_ts = datetime.fromisoformat(row['timestamp'])
-                    if start <= row_ts <= end and (sensor_id is None or row['sensor_id'] == sensor_id):
-                        yield {
-                            'timestamp': row_ts,
-                            'sensor_id': row['sensor_id'],
-                            'value': float(row['value']),
-                            'unit': row['unit']
-                        }
-
-        def parse_zip(zip_path):
-            with zipfile.ZipFile(zip_path, 'r') as zipf:
-                for name in zipf.namelist():
-                    with zipf.open(name) as f:
-                        lines = f.read().decode().splitlines()
-                        reader = csv.DictReader(lines)
-                        for row in reader:
+                # Check if file is empty
+                first_line = f.readline().strip()
+                if not first_line:
+                    return
+                
+                # Reset to beginning of file
+                f.seek(0)
+                
+                expected_headers = ['timestamp', 'sensor_id', 'value', 'unit']
+                actual_headers = first_line.split(',')
+                
+                if all(header.strip() in actual_headers for header in expected_headers):
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        try:
                             row_ts = datetime.fromisoformat(row['timestamp'])
                             if start <= row_ts <= end and (sensor_id is None or row['sensor_id'] == sensor_id):
                                 yield {
@@ -163,6 +160,50 @@ class Logger:
                                     'value': float(row['value']),
                                     'unit': row['unit']
                                 }
+                        except (KeyError, ValueError) as e:
+                            print(f"Warning: Skipping malformed row in {file_path}: {row}, Error: {e}")
+                else:
+                    f.seek(0)
+                    reader = csv.reader(f)
+                    for row in reader:
+                        if len(row) >= 4:
+                            try:
+                                row_ts = datetime.fromisoformat(row[0])
+                                if start <= row_ts <= end and (sensor_id is None or row[1] == sensor_id):
+                                    yield {
+                                        'timestamp': row_ts,
+                                        'sensor_id': row[1],
+                                        'value': float(row[2]),
+                                        'unit': row[3]
+                                    }
+                            except (ValueError, IndexError) as e:
+                                print(f"Warning: Skipping malformed row in {file_path}: {row}, Error: {e}")
+
+        def parse_zip(zip_path):
+            with zipfile.ZipFile(zip_path, 'r') as zipf:
+                for name in zipf.namelist():
+                    with zipf.open(name) as f:
+                        lines = f.read().decode().splitlines()
+                        if not lines:
+                            continue
+                            
+                        expected_headers = ['timestamp', 'sensor_id', 'value', 'unit']
+                        actual_headers = lines[0].split(',')
+                        
+                        if all(header.strip() in actual_headers for header in expected_headers):
+                            reader = csv.DictReader(lines)
+                            for row in reader:
+                                try:
+                                    row_ts = datetime.fromisoformat(row['timestamp'])
+                                    if start <= row_ts <= end and (sensor_id is None or row['sensor_id'] == sensor_id):
+                                        yield {
+                                            'timestamp': row_ts,
+                                            'sensor_id': row['sensor_id'],
+                                            'value': float(row['value']),
+                                            'unit': row['unit']
+                                        }
+                                except (KeyError, ValueError) as e:
+                                    print(f"Warning: Skipping malformed row in {zip_path}/{name}: {row}, Error: {e}")
 
         # Parsowanie aktualnych plików CSV
         for fname in os.listdir(self.log_dir):
@@ -171,6 +212,7 @@ class Logger:
 
         # Parsowanie zarchiwizowanych plików CSV
         archive_dir = os.path.join(self.log_dir, 'archive')
-        for fname in os.listdir(archive_dir):
-            if fname.endswith('.zip'):
-                yield from parse_zip(os.path.join(archive_dir, fname))
+        if os.path.exists(archive_dir):
+            for fname in os.listdir(archive_dir):
+                if fname.endswith('.zip'):
+                    yield from parse_zip(os.path.join(archive_dir, fname))

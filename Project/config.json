@@ -5,5 +5,11 @@
   "rotate_every_hours": 24,
   "max_size_mb": 20,
   "rotate_after_lines": 1000,
-  "retention_days": 30
+  "retention_days": 30,
+  "network": {
+    "host": "localhost",
+    "port": 5000,
+    "timeout": 5.0,
+    "retries": 3
+  }
 }
