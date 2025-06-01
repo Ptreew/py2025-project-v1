@@ -54,6 +54,9 @@ def run_client(config, logger, interval: float = 5.0):
         f"[+] Połączono z {host}:{port}. Rozpoczynam odczyt czujników co {interval}s (Ctrl+C aby przerwać)"
     )
 
+    consecutive_failures = 0
+    max_consecutive_failures = retries  # Maksymalna liczba kolejnych nieudanych prób
+
     try:
         while True:
             payload = {}
@@ -70,8 +73,14 @@ def run_client(config, logger, interval: float = 5.0):
             # Wysłanie pakietu z danymi
             if client.send(payload):
                 print("[+] Pakiet wysłany oraz potwierdzony (ACK).")
+                consecutive_failures = 0  # Resetuj licznik po udanym wysłaniu
             else:
-                print("[!] Nie udało się wysłać pakietu – brak ACK.")
+                consecutive_failures += 1
+                print(f"[!] Nie udało się wysłać pakietu – brak ACK. ({consecutive_failures}/{max_consecutive_failures})")
+                
+                if consecutive_failures >= max_consecutive_failures:
+                    print("[!] Osiągnięto maksymalną liczbę kolejnych nieudanych prób. Kończenie pracy.")
+                    break
 
             print("-" * 60)
             time.sleep(interval)
@@ -113,8 +122,8 @@ def main():
     parser.add_argument(
         "-i", "--interval",
         type=float,
-        default=5.0,
-        help="Interwał odczytu sensorów w sekundach (domyślnie 5)",
+        default=3.0,
+        help="Interwał odczytu sensorów w sekundach (domyślnie 3)",
     )
     
     args = parser.parse_args()

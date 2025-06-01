@@ -41,7 +41,7 @@ class NetworkClient:
                 return False
         
         retry_count = 0
-        while retry_count <= self.retries:
+        while retry_count < self.retries:
             try:
                 # Serializacja i wysłanie danych
                 message = self._serialize(data)

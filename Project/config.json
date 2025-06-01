@@ -8,8 +8,8 @@
   "retention_days": 30,
   "network": {
     "host": "localhost",
-    "port": 5000,
-    "timeout": 5.0,
-    "retries": 3
+    "port": 6000,
+    "timeout": 1.0,
+    "retries": 5
   }
 }
