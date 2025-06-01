@@ -4,6 +4,7 @@ import sys
 import threading
 import traceback
 from datetime import datetime
+from typing import List
 
 class NetworkServer:
     def __init__(self, port: int, logger=None):
@@ -11,6 +12,8 @@ class NetworkServer:
         self.logger = logger
         self.server_socket = None
         self.running = False
+        self._client_sockets: List[socket.socket] = []
+        self._clients_lock = threading.Lock()
         
     def start(self) -> None:
         try:
@@ -36,6 +39,10 @@ class NetworkServer:
                     client_thread.daemon = True
                     client_thread.start()
                     
+                    # Track client sockets
+                    with self._clients_lock:
+                        self._client_sockets.append(client_socket)
+                    
                 except KeyboardInterrupt:
                     print("\n[*] Przerwanie pracy serwera...")
                     self.stop()
@@ -44,6 +51,9 @@ class NetworkServer:
                     print(f"[!] Błąd podczas akceptowania połączenia: {str(e)}")
                     if self.logger:
                         self.logger.log_reading("server", datetime.now(), 0, f"accept_error: {str(e)}")
+                    # Jeśli serwer jest w trakcie zamykania, przerwij pętlę
+                    if not self.running and isinstance(e, OSError):
+                        break
         
         except Exception as e:
             print(f"[!] Błąd podczas uruchamiania serwera: {str(e)}")
@@ -54,13 +64,32 @@ class NetworkServer:
         self.running = False
         if self.server_socket:
             try:
+                try:
+                    self.server_socket.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    # Socket may already be closed or not connected; ignore.
+                    pass
                 self.server_socket.close()
+                self.server_socket = None
                 if self.logger:
                     self.logger.log_reading("server", datetime.now(), 0, "server_stopped")
             except Exception as e:
                 print(f"[!] Błąd podczas zatrzymywania serwera: {str(e)}")
                 if self.logger:
                     self.logger.log_reading("server", datetime.now(), 0, f"stop_error: {str(e)}")
+        
+        # Close all connected client sockets
+        with self._clients_lock:
+            for cs in self._client_sockets:
+                try:
+                    cs.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                try:
+                    cs.close()
+                except Exception:
+                    pass
+            self._client_sockets.clear()
     
     def _handle_client(self, client_socket, client_address) -> None:
         try:
@@ -106,7 +135,7 @@ class NetworkServer:
                         print(f"[!] Błąd dekodowania JSON: {str(e)}")
                         if self.logger:
                             self.logger.log_reading("server", datetime.now(), 0, f"json_decode_error: {str(e)}")
-        except (ConnectionResetError, socket.timeout):
+        except (ConnectionResetError, socket.timeout, OSError):
             print(f"[*] Zamknięto połączenie z {client_address[0]}:{client_address[1]}")
         except Exception as e:
             print(f"[!] Błąd podczas obsługi klienta {client_address[0]}:{client_address[1]}: {str(e)}")
@@ -114,6 +143,10 @@ class NetworkServer:
             if self.logger:
                 self.logger.log_reading("server", datetime.now(), 0, f"client_handling_error: {str(e)}")
         finally:
+            # Remove socket from tracking list
+            with self._clients_lock:
+                if client_socket in self._client_sockets:
+                    self._client_sockets.remove(client_socket)
             try:
                 client_socket.close()
             except:
